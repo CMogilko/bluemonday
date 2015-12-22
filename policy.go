@@ -65,6 +65,7 @@ type Policy struct {
 	// Will skip for href="/foo" or href="foo"
 	addTargetBlankToFullyQualifiedLinks bool
 
+	addTargetBlank bool
 	// When true, URLs must be parseable by "net/url" url.Parse()
 	requireParseableURLs bool
 
@@ -345,6 +346,13 @@ func (p *Policy) AddTargetBlankToFullyQualifiedLinks(require bool) *Policy {
 
 	p.addTargetBlankToFullyQualifiedLinks = require
 	p.requireParseableURLs = true
+
+	return p
+}
+
+//Always add target="_blank"
+func (p *Policy) AddTargetBlank(require bool) *Policy {
+	p.addTargetBlank = require
 
 	return p
 }
