@@ -52,6 +52,10 @@ type Policy struct {
 	// Allows the <!DOCTYPE > tag to exist in the sanitized document
 	allowDocType bool
 
+	// If true then we add spaces when stripping tags, specifically the closing
+	// tag is replaced by a space character.
+	addSpaces bool
+
 	// When true, add rel="nofollow" to HTML anchors
 	requireNoFollow bool
 
@@ -428,6 +432,23 @@ func (p *Policy) AllowDocType(allow bool) *Policy {
 	return p
 }
 
+// AddSpaceWhenStrippingTag states whether to add a single space " " when
+// removing tags that are not whitelisted by the policy.
+//
+// This is useful if you expect to strip tags in dense markup and may lose the
+// value of whitespace.
+//
+// For example: "<p>Hello</p><p>World</p>"" would be sanitized to "HelloWorld"
+// with the default value of false, but you may wish to sanitize this to
+// " Hello  World " by setting AddSpaceWhenStrippingTag to true as this would
+// retain the intent of the text.
+func (p *Policy) AddSpaceWhenStrippingTag(allow bool) *Policy {
+
+	p.addSpaces = allow
+
+	return p
+}
+
 // SkipElementsContent adds the HTML elements whose tags is needed to be removed
 // with it's content.
 func (p *Policy) SkipElementsContent(names ...string) *Policy {
@@ -453,6 +474,18 @@ func (p *Policy) SetCustomElementHandler(handler ElementHandler) *Policy {
 	p.init()
 
 	p.customHandler = handler
+	return p
+}
+
+// AllowElementsContent marks the HTML elements whose content should be
+// retained after removing the tag.
+func (p *Policy) AllowElementsContent(names ...string) *Policy {
+
+	p.init()
+
+	for _, element := range names {
+		delete(p.setOfElementsToSkipContent, strings.ToLower(element))
+	}
 	return p
 }
 
@@ -539,6 +572,7 @@ func (p *Policy) addDefaultElementsWithoutAttrs() {
 	p.setOfElementsAllowedWithoutAttrs["tfoot"] = struct{}{}
 	p.setOfElementsAllowedWithoutAttrs["th"] = struct{}{}
 	p.setOfElementsAllowedWithoutAttrs["thead"] = struct{}{}
+	p.setOfElementsAllowedWithoutAttrs["title"] = struct{}{}
 	p.setOfElementsAllowedWithoutAttrs["time"] = struct{}{}
 	p.setOfElementsAllowedWithoutAttrs["tr"] = struct{}{}
 	p.setOfElementsAllowedWithoutAttrs["tt"] = struct{}{}

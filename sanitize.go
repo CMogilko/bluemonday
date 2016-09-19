@@ -87,13 +87,13 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 	p.init()
 
 	var buff bytes.Buffer
-	tokenizer := html.NewTokenizer(r)
 
 	// if it's started to skipping element, skip all until
 	// endtag for THIS element encountered
 	skipElementContent := false
 	var skippingElementName string
 	var skippingElementCounter int
+	var mostRecentlyStartedToken string
 
 	// per element stack of counters
 	//
@@ -108,6 +108,7 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 	//                                            skip   skip  allow   skip
 	closingTagToSkipStack := map[string][]uint{}
 
+	tokenizer := html.NewTokenizer(r)
 	for {
 		if tokenizer.Next() == html.ErrorToken {
 			err := tokenizer.Err()
@@ -133,6 +134,8 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 			// Comments are ignored by default
 
 		case html.StartTagToken:
+
+			mostRecentlyStartedToken = token.Data
 
 			if skipElementContent {
 
@@ -176,6 +179,9 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 						skippingElementName = token.Data
 						skippingElementCounter = 1
 					}
+					if p.addSpaces {
+						buff.WriteString(" ")
+					}
 					break
 				}
 
@@ -186,6 +192,9 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 				if len(token.Attr) == 0 {
 					if !p.allowNoAttrs(token.Data) {
 						closingTagToSkipStack[token.Data] = append([]uint{1}, curTagSkipStack...)
+						if p.addSpaces {
+							buff.WriteString(" ")
+						}
 						break
 					}
 				}
@@ -203,6 +212,9 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 						skipElementContent = false
 					}
 				}
+				if p.addSpaces {
+					buff.WriteString(" ")
+				}
 				break
 			}
 
@@ -215,6 +227,9 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 			if len(curTagSkipStack) > 0 && curTagSkipStack[0] == 0 {
 				// skip element
 				closingTagToSkipStack[token.Data] = curTagSkipStack[1:]
+				if p.addSpaces {
+					buff.WriteString(" ")
+				}
 				break
 			}
 
@@ -229,6 +244,10 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 
 			if _, ok := p.elsAndAttrs[token.Data]; ok {
 				buff.WriteString(token.String())
+			} else {
+				if p.addSpaces {
+					buff.WriteString(" ")
+				}
 			}
 
 		case html.SelfClosingTagToken:
@@ -244,6 +263,9 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 
 				aps, ok := p.elsAndAttrs[token.Data]
 				if !ok {
+					if p.addSpaces {
+						buff.WriteString(" ")
+					}
 					break
 				}
 
@@ -252,6 +274,9 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 				}
 
 				if len(token.Attr) == 0 && !p.allowNoAttrs(token.Data) {
+					if p.addSpaces {
+						buff.WriteString(" ")
+					}
 					break
 				}
 
@@ -261,7 +286,19 @@ func (p *Policy) sanitize(r io.Reader) *bytes.Buffer {
 		case html.TextToken:
 
 			if !skipElementContent {
-				buff.WriteString(token.String())
+				switch strings.ToLower(mostRecentlyStartedToken) {
+				case "javascript":
+					// not encouraged, but if a policy allows JavaScript we
+					// should not HTML escape it as that would break the output
+					buff.WriteString(token.Data)
+				case "style":
+					// not encouraged, but if a policy allows CSS styles we
+					// should not HTML escape it as that would break the output
+					buff.WriteString(token.Data)
+				default:
+					// HTML escape the text
+					buff.WriteString(token.String())
+				}
 			}
 
 		default:
@@ -393,8 +430,10 @@ func (p *Policy) sanitizeAttrs(
 				}
 
 				if hrefFound {
-					var noFollowFound bool
-					var targetFound bool
+					var (
+						noFollowFound    bool
+						targetBlankFound bool
+					)
 
 					addNoFollow := (p.requireNoFollow ||
 						externalLink && p.requireNoFollowFullyQualifiedLinks)
@@ -411,36 +450,32 @@ func (p *Policy) sanitizeAttrs(
 							if strings.Contains(htmlAttr.Val, "nofollow") {
 								noFollowFound = true
 								tmpAttrs = append(tmpAttrs, htmlAttr)
+								appended = true
 							} else {
 								htmlAttr.Val += " nofollow"
 								noFollowFound = true
 								tmpAttrs = append(tmpAttrs, htmlAttr)
+								appended = true
 							}
-
-							appended = true
 						}
 
-						if elementName == "a" &&
-							htmlAttr.Key == "target" &&
-							addTargetBlank {
-
-							if strings.Contains(htmlAttr.Val, "_blank") {
-								targetFound = true
-								tmpAttrs = append(tmpAttrs, htmlAttr)
-							} else {
-								htmlAttr.Val = "_blank"
-								targetFound = true
-								tmpAttrs = append(tmpAttrs, htmlAttr)
+						if elementName == "a" && htmlAttr.Key == "target" {
+							if htmlAttr.Val == "_blank" {
+								targetBlankFound = true
 							}
-
-							appended = true
+							if addTargetBlank && !targetBlankFound {
+								htmlAttr.Val = "_blank"
+								targetBlankFound = true
+								tmpAttrs = append(tmpAttrs, htmlAttr)
+								appended = true
+							}
 						}
 
 						if !appended {
 							tmpAttrs = append(tmpAttrs, htmlAttr)
 						}
 					}
-					if noFollowFound || targetFound {
+					if noFollowFound || targetBlankFound {
 						cleanAttrs = tmpAttrs
 					}
 
@@ -451,11 +486,62 @@ func (p *Policy) sanitizeAttrs(
 						cleanAttrs = append(cleanAttrs, rel)
 					}
 
-					if elementName == "a" && addTargetBlank && !targetFound {
+					if elementName == "a" && addTargetBlank && !targetBlankFound {
 						rel := html.Attribute{}
 						rel.Key = "target"
 						rel.Val = "_blank"
+						targetBlankFound = true
 						cleanAttrs = append(cleanAttrs, rel)
+					}
+
+					if targetBlankFound {
+						// target="_blank" has a security risk that allows the
+						// opened window/tab to issue JavaScript calls against
+						// window.opener, which in effect allow the destination
+						// of the link to control the source:
+						// https://dev.to/ben/the-targetblank-vulnerability-by-example
+						//
+						// To mitigate this risk, we need to add a specific rel
+						// attribute if it is not already present.
+						// rel="noopener"
+						//
+						// Unfortunately this is processing the rel twice (we
+						// already looked at it earlier ^^) as we cannot be sure
+						// of the ordering of the href and rel, and whether we
+						// have fully satisfied that we need to do this. This
+						// double processing only happens *if* target="_blank"
+						// is true.
+						var noOpenerAdded bool
+						tmpAttrs := []html.Attribute{}
+						for _, htmlAttr := range cleanAttrs {
+							var appended bool
+							if htmlAttr.Key == "rel" {
+								if strings.Contains(htmlAttr.Val, "noopener") {
+									noOpenerAdded = true
+									tmpAttrs = append(tmpAttrs, htmlAttr)
+								} else {
+									htmlAttr.Val += " noopener"
+									noOpenerAdded = true
+									tmpAttrs = append(tmpAttrs, htmlAttr)
+								}
+
+								appended = true
+							}
+							if !appended {
+								tmpAttrs = append(tmpAttrs, htmlAttr)
+							}
+						}
+						if noOpenerAdded {
+							cleanAttrs = tmpAttrs
+						} else {
+							// rel attr was not found, or else noopener would
+							// have been added already
+							rel := html.Attribute{}
+							rel.Key = "rel"
+							rel.Val = "noopener"
+							cleanAttrs = append(cleanAttrs, rel)
+						}
+
 					}
 				}
 			default:
