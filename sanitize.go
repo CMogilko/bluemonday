@@ -409,7 +409,8 @@ func (p *Policy) sanitizeAttrs(
 
 		if (p.requireNoFollow ||
 			p.requireNoFollowFullyQualifiedLinks ||
-			p.addTargetBlankToFullyQualifiedLinks) &&
+			p.addTargetBlankToFullyQualifiedLinks ||
+			p.addTargetBlank) &&
 			len(cleanAttrs) > 0 {
 
 			// Add rel="nofollow" if a "href" exists
@@ -442,8 +443,8 @@ func (p *Policy) sanitizeAttrs(
 					addNoFollow := (p.requireNoFollow ||
 						externalLink && p.requireNoFollowFullyQualifiedLinks)
 
-					addTargetBlank := (externalLink &&
-						p.addTargetBlankToFullyQualifiedLinks)
+					addTargetBlank := (p.addTargetBlank ||
+						externalLink &&	p.addTargetBlankToFullyQualifiedLinks)
 
 					tmpAttrs := []html.Attribute{}
 					for _, htmlAttr := range cleanAttrs {
