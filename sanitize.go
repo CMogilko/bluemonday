@@ -33,9 +33,16 @@ import (
 	"bytes"
 	"io"
 	"net/url"
+	"regexp"
 	"strings"
 
 	"golang.org/x/net/html"
+)
+
+var (
+	dataAttribute             = regexp.MustCompile("^data-.+")
+	dataAttributeXMLPrefix    = regexp.MustCompile("^xml.+")
+	dataAttributeInvalidChars = regexp.MustCompile("[A-Z;]+")
 )
 
 // Sanitize takes a string that contains a HTML fragment or document and applies
@@ -332,6 +339,13 @@ func (p *Policy) sanitizeAttrs(
 	// whitelisted explicitly or globally.
 	cleanAttrs := []html.Attribute{}
 	for _, htmlAttr := range attrs {
+		if p.allowDataAttributes {
+			// If we see a data attribute, let it through.
+			if isDataAttribute(htmlAttr.Key) {
+				cleanAttrs = append(cleanAttrs, htmlAttr)
+				continue
+			}
+		}
 		// Is there an element specific attribute policy that applies?
 		if ap, ok := aps[htmlAttr.Key]; ok {
 			if ap.regexp != nil {
@@ -347,6 +361,7 @@ func (p *Policy) sanitizeAttrs(
 
 		// Is there a global attribute policy that applies?
 		if ap, ok := p.globalAttrs[htmlAttr.Key]; ok {
+
 			if ap.regexp != nil {
 				if ap.regexp.MatchString(htmlAttr.Val) {
 					cleanAttrs = append(cleanAttrs, htmlAttr)
@@ -617,4 +632,23 @@ func linkable(elementName string) bool {
 	default:
 		return false
 	}
+}
+
+func isDataAttribute(val string) bool {
+	if !dataAttribute.MatchString(val) {
+		return false
+	}
+	rest := strings.Split(val, "data-")
+	if len(rest) == 1 {
+		return false
+	}
+	// data-xml* is invalid.
+	if dataAttributeXMLPrefix.MatchString(rest[1]) {
+		return false
+	}
+	// no uppercase or semi-colons allowed.
+	if dataAttributeInvalidChars.MatchString(rest[1]) {
+		return false
+	}
+	return true
 }
