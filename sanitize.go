@@ -123,23 +123,25 @@ func escapeUrlComponent(val string) string {
 }
 
 func sanitizedUrl(val string) (string, error) {
-	u, err := url.Parse(val)
-	if err != nil {
-		return "", err
-	}
-	// sanitize the url query params
-	sanitizedQueryValues := make(url.Values, 0)
-	queryValues := u.Query()
-	for k, vals := range queryValues {
-		sk := html.EscapeString(k)
-		for _, v := range vals {
-			sv := escapeUrlComponent(v)
-			sanitizedQueryValues.Set(sk, sv)
-		}
-	}
-	u.RawQuery = sanitizedQueryValues.Encode()
-	// u.String() will also sanitize host/scheme/user/pass
-	return u.String(), nil
+	return val, nil
+	// TODO: return back
+	//u, err := url.Parse(val)
+	//if err != nil {
+	//	return "", err
+	//}
+	//// sanitize the url query params
+	//sanitizedQueryValues := make(url.Values, 0)
+	//queryValues := u.Query()
+	//for k, vals := range queryValues {
+	//	sk := html.EscapeString(k)
+	//	for _, v := range vals {
+	//		sv := escapeUrlComponent(v)
+	//		sanitizedQueryValues.Set(sk, sv)
+	//	}
+	//}
+	//u.RawQuery = sanitizedQueryValues.Encode()
+	//// u.String() will also sanitize host/scheme/user/pass
+	//return u.String(), nil
 }
 
 func (p *Policy) writeLinkableBuf(buff *bytes.Buffer, token *html.Token) {

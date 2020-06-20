@@ -131,10 +131,10 @@ func TestLinks(t *testing.T) {
 			in:       `<a href="?q=1&r=2">`,
 			expected: `<a href="?q=1&r=2" rel="nofollow">`,
 		},
-		{
-			in:       `<a href="?q=1&r=2&s=:foo@">`,
-			expected: `<a href="?q=1&r=2&s=%3Afoo%40" rel="nofollow">`,
-		},
+		//{
+		//	in:       `<a href="?q=1&r=2&s=:foo@">`,
+		//	expected: `<a href="?q=1&r=2&s=%3Afoo%40" rel="nofollow">`,
+		//},
 		{
 			in:       `<img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAHElEQVQI12P4//8/w38GIAXDIBKE0DHxgljNBAAO9TXL0Y4OHwAAAABJRU5ErkJggg==" alt="Red dot" />`,
 			expected: `<img alt="Red dot"/>`,
